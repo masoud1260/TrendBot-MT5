@@ -22,8 +22,9 @@ input double StopOffsetPips = 2;
 input double RiskReward = 1.6;
 input int EMA_Fast = 50;
 input int EMA_Slow = 200;
-
-
+input bool EnableSignals = true;
+input int MajorLookbackBars = 192;
+input int SwingStrength = 3;
 //--- Handles
 int adxHandle;
 int emaFastHandle;
@@ -214,6 +215,301 @@ int CheckCandlePullback()
    return 0;
 
 }
+
+void CreateSignal(int direction)
+{
+
+   double highs[3];
+   double lows[3];
+
+
+   ArraySetAsSeries(highs,true);
+   ArraySetAsSeries(lows,true);
+
+
+   CopyHigh(_Symbol,TradeTimeframe,0,3,highs);
+   CopyLow(_Symbol,TradeTimeframe,0,3,lows);
+
+
+
+   double pip = _Point * 10;
+
+
+
+   double entry;
+   double stop;
+   double take;
+
+
+
+   if(direction == 1)
+   {
+
+      entry = highs[1] + EntryOffsetPips * pip;
+
+      stop = lows[1] - StopOffsetPips * pip;
+
+      double risk = entry - stop;
+
+      take = entry + risk * RiskReward;
+DrawSignal(1,entry,stop,take);
+if(!CheckMajorLevel(1,take))
+{
+   Print("BUY rejected: Major M15 resistance");
+   return;
+}
+      Print(
+      "BUY SIGNAL",
+      " Entry: ",
+      entry,
+      " SL: ",
+      stop,
+      " TP: ",
+      take
+      );
+
+   }
+
+
+
+   if(direction == -1)
+   {
+
+      entry = lows[1] - EntryOffsetPips * pip;
+
+      stop = highs[1] + StopOffsetPips * pip;
+
+      double risk = stop - entry;
+
+      take = entry - risk * RiskReward;
+DrawSignal(-1,entry,stop,take);
+if(!CheckMajorLevel(-1,take))
+{
+   Print("SELL rejected: Major M15 support");
+   return;
+}
+      Print(
+      "SELL SIGNAL",
+      " Entry: ",
+      entry,
+      " SL: ",
+      stop,
+      " TP: ",
+      take
+      );
+
+   }
+
+}
+void DrawSignal(
+   int direction,
+   double entry,
+   double stop,
+   double take
+)
+{
+
+   string timeName =
+   IntegerToString(TimeCurrent());
+
+
+   string arrowName =
+   "SignalArrow_" + timeName;
+
+
+
+   datetime signalTime =
+   iTime(_Symbol,TradeTimeframe,1);
+
+
+
+   if(direction==1)
+   {
+
+      ObjectCreate(
+         0,
+         arrowName,
+         OBJ_ARROW,
+         0,
+         signalTime,
+         iLow(_Symbol,TradeTimeframe,1)
+      );
+
+
+      ObjectSetInteger(
+         0,
+         arrowName,
+         OBJPROP_ARROWCODE,
+         233
+      );
+
+   }
+
+
+
+   if(direction==-1)
+   {
+
+      ObjectCreate(
+         0,
+         arrowName,
+         OBJ_ARROW,
+         0,
+         signalTime,
+         iHigh(_Symbol,TradeTimeframe,1)
+      );
+
+
+      ObjectSetInteger(
+         0,
+         arrowName,
+         OBJPROP_ARROWCODE,
+         234
+      );
+
+   }
+
+
+
+   // خط ورود
+
+   ObjectCreate(
+      0,
+      "ENTRY_"+timeName,
+      OBJ_HLINE,
+      0,
+      0,
+      entry
+   );
+
+
+   // حد ضرر
+
+   ObjectCreate(
+      0,
+      "SL_"+timeName,
+      OBJ_HLINE,
+      0,
+      0,
+      stop
+   );
+
+
+   // حد سود
+
+   ObjectCreate(
+      0,
+      "TP_"+timeName,
+      OBJ_HLINE,
+      0,
+      0,
+      take
+   );
+
+}
+double GetMajorHigh()
+{
+
+   for(int i=SwingStrength+1; i<MajorLookbackBars-SwingStrength; i++)
+   {
+
+      double high=iHigh(_Symbol,PERIOD_M15,i);
+
+      bool valid=true;
+
+
+      for(int j=1;j<=SwingStrength;j++)
+      {
+
+         if(high <= iHigh(_Symbol,PERIOD_M15,i-j) ||
+            high <= iHigh(_Symbol,PERIOD_M15,i+j))
+         {
+            valid=false;
+            break;
+         }
+
+      }
+
+
+      if(valid)
+         return high;
+
+   }
+
+
+   return 0;
+
+}
+
+
+
+double GetMajorLow()
+{
+
+   for(int i=SwingStrength+1; i<MajorLookbackBars-SwingStrength; i++)
+   {
+
+      double low=iLow(_Symbol,PERIOD_M15,i);
+
+      bool valid=true;
+
+
+      for(int j=1;j<=SwingStrength;j++)
+      {
+
+         if(low >= iLow(_Symbol,PERIOD_M15,i-j) ||
+            low >= iLow(_Symbol,PERIOD_M15,i+j))
+         {
+            valid=false;
+            break;
+         }
+
+      }
+
+
+      if(valid)
+         return low;
+
+   }
+
+
+   return 0;
+
+}
+bool CheckMajorLevel(int direction,double take)
+{
+
+   double majorHigh = GetMajorHigh();
+   double majorLow  = GetMajorLow();
+
+
+
+   if(direction==1)
+   {
+
+      if(majorHigh>0 && take >= majorHigh)
+      {
+         return false;
+      }
+
+   }
+
+
+
+   if(direction==-1)
+   {
+
+      if(majorLow>0 && take <= majorLow)
+      {
+         return false;
+      }
+
+   }
+
+
+   return true;
+
+}
 void OnTick()
 {
 
@@ -239,6 +535,22 @@ void OnTick()
 bool ranging = IsMarketRange();
 int breakout = CheckRangeBreakout();
 int pullback = CheckCandlePullback();
+if(EnableSignals)
+{
+
+   if(!ranging && breakout==1 && pullback==1 && trend=="BULLISH")
+   {
+      CreateSignal(1);
+   }
+
+
+
+   if(!ranging && breakout==-1 && pullback==-1 && trend=="BEARISH")
+   {
+      CreateSignal(-1);
+   }
+
+}
    if(currentADX >= ADX_Minimum)
    {
 
