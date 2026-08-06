@@ -72,10 +72,51 @@ int OnInit()
 void OnTick()
 {
 
-   // مرحله بعد:
-   // 1- خواندن ADX
-   // 2- تشخیص روند
-   // 3- تشخیص رنج
-   // 4- پیدا کردن پولبک
+   double adxValue[];
+   double emaFast[];
+   double emaSlow[];
+
+
+   ArraySetAsSeries(adxValue,true);
+   ArraySetAsSeries(emaFast,true);
+   ArraySetAsSeries(emaSlow,true);
+
+
+   CopyBuffer(adxHandle,0,0,3,adxValue);
+   CopyBuffer(emaFastHandle,0,0,3,emaFast);
+   CopyBuffer(emaSlowHandle,0,0,3,emaSlow);
+
+
+
+   double currentADX = adxValue[0];
+
+   string trend = "NO TREND";
+
+
+   if(currentADX >= ADX_Minimum)
+   {
+
+      if(emaFast[0] > emaSlow[0])
+      {
+         trend = "BULLISH";
+      }
+
+      else if(emaFast[0] < emaSlow[0])
+      {
+         trend = "BEARISH";
+      }
+
+   }
+
+
+   Comment(
+      "TrendBot\n",
+      "ADX: ",
+      DoubleToString(currentADX,2),
+      "\n",
+      "Trend: ",
+      trend
+   );
+
 
 }
